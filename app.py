@@ -67,10 +67,6 @@ def make_art(base_file, title, subtitle, bullets, cta, target):
     # RGBA composite
     im=Image.alpha_composite(im.convert('RGBA'),shade)
     d=ImageDraw.Draw(im)
-    # Top understated accents, clear safe zone from UI at top
-    d.rounded_rectangle((106,248,350,260), radius=6, fill=ORANGE+(255,))
-    d.rounded_rectangle((356,248,430,260), radius=6, fill=YELLOW+(255,))
-    d.rounded_rectangle((436,248,486,260), radius=6, fill=LIME+(255,))
     if LOGO.exists():
         try:
             with Image.open(LOGO) as logo:
@@ -86,6 +82,18 @@ def make_art(base_file, title, subtitle, bullets, cta, target):
 
                 # resize() sí amplía la imagen, a diferencia de thumbnail()
                 logo = logo.resize(new_size, Image.Resampling.LANCZOS)
+
+                # Nuevas coordenadas (120 mueve el logo hacia arriba)
+                logo_x = (1080 - logo.width) // 2
+                logo_y = 120
+
+                # Fondo blanco detrás del logo para que no se pierda (elimina estas 6 líneas si usas un logo blanco)
+                padding = 25
+                d.rounded_rectangle(
+                    (logo_x - padding, logo_y - padding, logo_x + logo.width + padding, logo_y + logo.height + padding), 
+                    radius=15, 
+                    fill=(255, 255, 255, 230)
+                )
 
                 im.alpha_composite(logo,((1080-logo.width)//2,290))
         except Exception as e:
