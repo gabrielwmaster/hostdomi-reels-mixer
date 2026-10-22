@@ -1,0 +1,22 @@
+services:
+  hostdomi-reels-mixer:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Configure this as an environment secret in Dokploy (never commit a real secret).
+      MIXER_API_KEY: ${MIXER_API_KEY:?Define MIXER_API_KEY in Dokploy}
+      HOSTDOMI_LOGO_PATH: /app/assets/logo.png
+    networks:
+      - dokploy-network
+    expose:
+      - "8080"
+    # Private worker only. Do not publish port 8080 to the Internet.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  dokploy-network:
+    external: true
