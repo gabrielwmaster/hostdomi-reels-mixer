@@ -87,7 +87,7 @@ def make_art(base_file, title, subtitle, bullets, cta, target):
                 logo_x = (1080 - logo.width) // 2
                 logo_y = 120
 
-                # Fondo blanco detrás del logo para que no se pierda (elimina estas 6 líneas si usas un logo blanco)
+                # Fondo blanco detrás del logo para que no se pierda
                 padding = 25
                 d.rounded_rectangle(
                     (logo_x - padding, logo_y - padding, logo_x + logo.width + padding, logo_y + logo.height + padding), 
@@ -95,7 +95,8 @@ def make_art(base_file, title, subtitle, bullets, cta, target):
                     fill=(255, 255, 255, 230)
                 )
 
-                im.alpha_composite(logo,((1080-logo.width)//2,290))
+                # CORRECCIÓN: Usar las variables logo_x y logo_y en lugar de 290
+                im.alpha_composite(logo, (logo_x, logo_y))
         except Exception as e:
             raise ValueError('Logo oficial inválido: '+str(e))
     else:
