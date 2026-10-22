@@ -75,7 +75,18 @@ def make_art(base_file, title, subtitle, bullets, cta, target):
         try:
             with Image.open(LOGO) as logo:
                 logo=logo.convert('RGBA')
-                logo.thumbnail((650,160),Image.Resampling.LANCZOS)
+
+                # Aumentamos el área máxima permitida
+                target_w = 650
+                target_h = 150
+
+                # Calculamos la proporción para que encaje perfecto sin deformarse
+                ratio = min(target_w / logo.width, target_h / logo.height)
+                new_size = (int(logo.width * ratio), int(logo.height * ratio))
+
+                # resize() sí amplía la imagen, a diferencia de thumbnail()
+                logo = logo.resize(new_size, Image.Resampling.LANCZOS)
+
                 im.alpha_composite(logo,((1080-logo.width)//2,290))
         except Exception as e:
             raise ValueError('Logo oficial inválido: '+str(e))
