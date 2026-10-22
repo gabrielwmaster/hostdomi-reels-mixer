@@ -1,0 +1,27 @@
+# macOS Finder metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Icon?
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local configuration and editor files
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# Local logs and build artifacts
+*.log
+build/
+dist/

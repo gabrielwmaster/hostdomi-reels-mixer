@@ -75,7 +75,7 @@ def make_art(base_file, title, subtitle, bullets, cta, target):
         try:
             with Image.open(LOGO) as logo:
                 logo=logo.convert('RGBA')
-                logo.thumbnail((570,135),Image.Resampling.LANCZOS)
+                logo.thumbnail((650,160),Image.Resampling.LANCZOS)
                 im.alpha_composite(logo,((1080-logo.width)//2,290))
         except Exception as e:
             raise ValueError('Logo oficial inválido: '+str(e))
