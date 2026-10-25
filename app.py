@@ -177,7 +177,7 @@ async def compose(image:UploadFile=File(...),audio:UploadFile=File(...),title:st
         if not isinstance(bullets,list):raise HTTPException(400,'bullets_json debe ser array')
         length=duration_of(snd)
         # No truncated / dubbed / missing speech allowed. Audio must be within 15-25s.
-        if not 15<=length<=25:raise HTTPException(422,f'Audio debe durar 15–25 segundos; recibido: {length:.2f}s. Ajusta spoken_es en ChatGPT.')
+        if not 12<=length<=25:raise HTTPException(422,f'Audio debe durar 12–25 segundos; recibido: {length:.2f}s. Ajusta spoken_es en ChatGPT.')
         make_art(pic,title[:120],subtitle[:160],[str(s)[:80] for s in bullets],cta[:95],art)
         cmd=['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y','-loop','1','-framerate','30','-i',str(art),'-i',str(snd),'-c:v','libx264','-preset','veryfast','-crf','22','-pix_fmt','yuv420p','-r','30','-c:a','aac','-b:a','160k','-ar','48000','-af','loudnorm=I=-16:TP=-1.5:LRA=11','-shortest','-movflags','+faststart','-t','25',str(mov)]
         proc=subprocess.run(cmd,capture_output=True,text=True,timeout=200)
