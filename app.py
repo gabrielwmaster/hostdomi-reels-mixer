@@ -53,6 +53,42 @@ def wrap_lines(draw, text, maxw, f, maxlines=None):
     return result
 
 
+def add_official_logo(image):
+    """Place the configured official logo using the established HOSTDOMI layout."""
+    if not LOGO.exists():
+        return image
+    try:
+        with Image.open(LOGO) as logo:
+            logo = logo.convert('RGBA')
+
+            # Keep the exact approved logo area and placement used by /compose.
+            target_w = 650
+            target_h = 150
+            ratio = min(target_w / logo.width, target_h / logo.height)
+            new_size = (int(logo.width * ratio), int(logo.height * ratio))
+            logo = logo.resize(new_size, Image.Resampling.LANCZOS)
+            logo_x = (1080 - logo.width) // 2
+            logo_y = 120
+            padding = 25
+
+            image = image.convert('RGBA')
+            draw = ImageDraw.Draw(image)
+            draw.rounded_rectangle(
+                (
+                    logo_x - padding,
+                    logo_y - padding,
+                    logo_x + logo.width + padding,
+                    logo_y + logo.height + padding,
+                ),
+                radius=15,
+                fill=(255, 255, 255, 230),
+            )
+            image.alpha_composite(logo, (logo_x, logo_y))
+            return image
+    except Exception as err:
+        raise ValueError('Logo oficial inválido: ' + str(err))
+
+
 def make_art(base_file, title, subtitle, bullets, cta, target):
     with Image.open(base_file) as im:
         im = ImageOps.fit(im.convert('RGB'), (1080,1920), method=Image.Resampling.LANCZOS, centering=(0.5,0.5))
@@ -66,40 +102,11 @@ def make_art(base_file, title, subtitle, bullets, cta, target):
             pix[xx,yy]=(NAVY[0],NAVY[1],NAVY[2], opacity)
     # RGBA composite
     im=Image.alpha_composite(im.convert('RGBA'),shade)
-    d=ImageDraw.Draw(im)
     if LOGO.exists():
-        try:
-            with Image.open(LOGO) as logo:
-                logo=logo.convert('RGBA')
-
-                # Aumentamos el área máxima permitida
-                target_w = 650
-                target_h = 150
-
-                # Calculamos la proporción para que encaje perfecto sin deformarse
-                ratio = min(target_w / logo.width, target_h / logo.height)
-                new_size = (int(logo.width * ratio), int(logo.height * ratio))
-
-                # resize() sí amplía la imagen, a diferencia de thumbnail()
-                logo = logo.resize(new_size, Image.Resampling.LANCZOS)
-
-                # Nuevas coordenadas (120 mueve el logo hacia arriba)
-                logo_x = (1080 - logo.width) // 2
-                logo_y = 120
-
-                # Fondo blanco detrás del logo para que no se pierda
-                padding = 25
-                d.rounded_rectangle(
-                    (logo_x - padding, logo_y - padding, logo_x + logo.width + padding, logo_y + logo.height + padding), 
-                    radius=15, 
-                    fill=(255, 255, 255, 230)
-                )
-
-                # CORRECCIÓN: Usar las variables logo_x y logo_y en lugar de 290
-                im.alpha_composite(logo, (logo_x, logo_y))
-        except Exception as e:
-            raise ValueError('Logo oficial inválido: '+str(e))
+        im = add_official_logo(im)
+        d=ImageDraw.Draw(im)
     else:
+        d=ImageDraw.Draw(im)
         d.text((110,300),'HOSTDOMI',font=font(70),fill=WHITE)
         d.text((114,378),'TECNOLOGÍA · MARKETING · WEB',font=font(20,False),fill=(222,228,240,255))
     # Eyebrow + title only in central safe area
@@ -149,6 +156,38 @@ def duration_of(filename):
     return d
 
 
+async def save_upload(upload, destination, limit):
+    """Save one streamed upload while enforcing the endpoint size limit."""
+    total = 0
+    with destination.open('wb') as f:
+        while part := await upload.read(1024 * 1024):
+            total += len(part)
+            if total > limit:
+                raise HTTPException(413, 'Archivo demasiado grande')
+            f.write(part)
+    if total < 1024:
+        raise ValueError('Archivo de entrada vacío')
+
+
+def validate_final_png(filename):
+    """Require an already-approved vertical canvas; never resize or render it."""
+    try:
+        with Image.open(filename) as image:
+            image.verify()
+        with Image.open(filename) as image:
+            if image.format != 'PNG':
+                raise ValueError('image debe ser un PNG')
+            if image.size != (1080, 1920):
+                raise ValueError(
+                    'El PNG final debe medir exactamente 1080x1920; '
+                    'no se redimensiona para no alterar el arte aprobado'
+                )
+    except ValueError:
+        raise
+    except Exception as err:
+        raise ValueError('PNG final inválido: ' + str(err))
+
+
 @app.get('/health')
 async def health():
     return {'ok':True,'mode':'one-static-image-plus-audio','logo_loaded':LOGO.exists()}
@@ -165,13 +204,7 @@ async def compose(image:UploadFile=File(...),audio:UploadFile=File(...),title:st
         art=work/'composed.png'
         mov=work/'output.mp4'
         for upload,dest,limit in [(image,pic,32*1024*1024),(audio,snd,20*1024*1024)]:
-            total=0
-            with dest.open('wb') as f:
-                while part:=await upload.read(1024*1024):
-                    total+=len(part)
-                    if total>limit:raise HTTPException(413,'Archivo demasiado grande')
-                    f.write(part)
-            if total<1024:raise ValueError('Archivo de entrada vacío')
+            await save_upload(upload, dest, limit)
         try:bullets=json.loads(bullets_json)
         except ValueError:raise HTTPException(400,'bullets_json no es un array JSON')
         if not isinstance(bullets,list):raise HTTPException(400,'bullets_json debe ser array')
@@ -188,3 +221,62 @@ async def compose(image:UploadFile=File(...),audio:UploadFile=File(...),title:st
     except Exception as err:
         shutil.rmtree(work,ignore_errors=True)
         raise HTTPException(422,str(err))
+
+
+@app.post('/compose-approved')
+async def compose_approved(
+    image: UploadFile = File(...),
+    audio: UploadFile = File(...),
+    x_mixer_key: str | None = Header(None),
+):
+    """Mux an approved PNG and MP3 without adding or modifying any artwork."""
+    if not SECRET or not x_mixer_key or not hmac.compare_digest(x_mixer_key, SECRET):
+        raise HTTPException(401, 'X-Mixer-Key incorrecta o MIXER_API_KEY no configurada')
+
+    work = Path(tempfile.mkdtemp(prefix='hostdomi-approved-reel-'))
+    try:
+        pic = work / 'approved.png'
+        art = work / 'approved-with-logo.png'
+        snd = work / 'voice.mp3'
+        mov = work / 'output.mp4'
+        await save_upload(image, pic, 32 * 1024 * 1024)
+        await save_upload(audio, snd, 20 * 1024 * 1024)
+        validate_final_png(pic)
+
+        # Apply the same configured logo asset, dimensions, and placement used
+        # by /compose before encoding the approved asset.
+        with Image.open(pic) as image:
+            add_official_logo(image).convert('RGB').save(art, 'PNG', optimize=True)
+
+        length = duration_of(snd)
+        if not 12 <= length <= 25:
+            raise HTTPException(
+                422,
+                f'Audio debe durar 12–25 segundos; recibido: {length:.2f}s.',
+            )
+
+        # The only graphic operation is the official logo, using the same asset
+        # and geometry as /compose. No text, CTA, crop, or scale is added.
+        cmd = [
+            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
+            '-loop', '1', '-framerate', '30', '-i', str(art), '-i', str(snd),
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+            '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k',
+            '-ar', '48000', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+            '-shortest', '-movflags', '+faststart', '-t', '25', str(mov),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=200)
+        if proc.returncode or not mov.exists() or mov.stat().st_size < 20000:
+            raise ValueError('No se generó MP4 válido: ' + proc.stderr[-900:])
+        return FileResponse(
+            mov,
+            media_type='video/mp4',
+            filename='hostdomi-reel-approved.mp4',
+            background=BackgroundTask(shutil.rmtree, work, ignore_errors=True),
+        )
+    except HTTPException:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
+    except Exception as err:
+        shutil.rmtree(work, ignore_errors=True)
+        raise HTTPException(422, str(err))
