@@ -72,17 +72,7 @@ def add_official_logo(image):
             padding = 25
 
             image = image.convert('RGBA')
-            draw = ImageDraw.Draw(image)
-            draw.rounded_rectangle(
-                (
-                    logo_x - padding,
-                    logo_y - padding,
-                    logo_x + logo.width + padding,
-                    logo_y + logo.height + padding,
-                ),
-                radius=15,
-                fill=(255, 255, 255, 230),
-            )
+            
             image.alpha_composite(logo, (logo_x, logo_y))
             return image
     except Exception as err:
