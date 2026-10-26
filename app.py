@@ -170,22 +170,31 @@ async def save_upload(upload, destination, limit):
 
 
 def validate_final_png(filename):
-    """Require an already-approved vertical canvas; never resize or render it."""
+    """Validate the approved PNG without imposing its source dimensions."""
     try:
         with Image.open(filename) as image:
             image.verify()
         with Image.open(filename) as image:
             if image.format != 'PNG':
                 raise ValueError('image debe ser un PNG')
-            if image.size != (1080, 1920):
-                raise ValueError(
-                    'El PNG final debe medir exactamente 1080x1920; '
-                    'no se redimensiona para no alterar el arte aprobado'
-                )
     except ValueError:
         raise
     except Exception as err:
         raise ValueError('PNG final inválido: ' + str(err))
+
+
+def prepare_approved_art(source, target):
+    """Create the required vertical canvas, then apply the official logo."""
+    with Image.open(source) as image:
+        # Match /compose: centre-crop only as needed to create the Reels canvas.
+        # No text, CTA, or other graphics are drawn or synthesized here.
+        image = ImageOps.fit(
+            image.convert('RGB'),
+            (1080, 1920),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+        add_official_logo(image).convert('RGB').save(target, 'PNG', optimize=True)
 
 
 @app.get('/health')
@@ -243,10 +252,9 @@ async def compose_approved(
         await save_upload(audio, snd, 20 * 1024 * 1024)
         validate_final_png(pic)
 
-        # Apply the same configured logo asset, dimensions, and placement used
-        # by /compose before encoding the approved asset.
-        with Image.open(pic) as image:
-            add_official_logo(image).convert('RGB').save(art, 'PNG', optimize=True)
+        # Normalize to the Reels canvas and apply the same configured logo,
+        # dimensions, and placement used by /compose before encoding.
+        prepare_approved_art(pic, art)
 
         length = duration_of(snd)
         if not 12 <= length <= 25:
